@@ -1,0 +1,85 @@
+replicaCount: 1
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: registry.example.com/build/gocacheport
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+cache:
+  diskBytes: 10737418240
+  maxEntries: 100000
+  maxObjectBytes: 134217728
+  memoryBytes: 134217728
+  memoryObjectBytes: 1048576
+  ttl: "0s"
+  maxConcurrent: 32
+  requestTimeout: "2m"
+  shutdownTimeout: "30s"
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 20Gi
+  storageClass: ""
+  retain: true
+
+auth:
+  existingSecret: ""
+  tokenKey: token
+
+service:
+  port: 8080
+admin:
+  port: 9090
+  pprof: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 512Mi
+goMemoryLimit: 384MiB
+terminationGracePeriodSeconds: 40
+startupProbe:
+  periodSeconds: 5
+  failureThreshold: 60
+temporaryStorageSize: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+extraEnv: []
+logLevel: info
+
+metrics:
+  scrapeAnnotations: true
+  serviceMonitor:
+    enabled: false
+    additionalLabels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+  prometheusRule:
+    enabled: false
+    additionalLabels: {}
+
+tracing:
+  enabled: false
+  endpoint: http://otel-collector.observability.svc:4318
+  sampleRatio: 0.1
+  existingSecret: ""
+
+networkPolicy:
+  enabled: false
+  clientsFrom:
+    - podSelector: {}
+  monitoringFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring

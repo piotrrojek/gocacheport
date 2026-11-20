@@ -1,0 +1,51 @@
+[tools]
+go = "1.27.3"
+gofumpt = "0.12.0"
+helm = "4.3.1"
+kind = "0.33.0"
+kubectl = "1.36.2"
+shellcheck = "0.11.0"
+"http:dagger" = { version = "1.0.0-beta.25", url = 'https://dl.dagger.io/dagger/releases/{{ version }}/dagger_v{{ version }}_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz', checksum_url = 'https://dl.dagger.io/dagger/releases/{{ version }}/checksums.txt' }
+
+[env]
+GOCACHEPORT_DIR = "{{config_root}}/.cache/server"
+
+[tasks.build]
+description = "Build the server and cache program"
+run = "go build -trimpath -o bin/gocacheport ./cmd/gocacheport"
+
+[tasks.fmt]
+description = "Modernize and format Go sources"
+run = "go fix ./... && gofumpt -extra -w cmd internal integration"
+
+[tasks.lint]
+description = "Check Go correctness and Helm templates"
+run = "go vet ./... && shellcheck scripts/*.sh && bash scripts/check-chart.sh"
+
+[tasks.test]
+description = "Run real HTTP, filesystem, protocol, and Go build integrations"
+run = "go test -race -count=1 ./..."
+
+[tasks."dagger:test"]
+description = "Run race-enabled integrations on the selected Dagger engine"
+run = "dagger check --go --check=test --progress=plain"
+
+[tasks.check]
+description = "Run the delivery checks"
+depends = ["lint", "dagger:test", "build"]
+
+[tasks.serve]
+description = "Run the filesystem-backed cache"
+run = "go run ./cmd/gocacheport serve"
+
+[tasks.chart]
+description = "Render the Kubernetes chart"
+run = "helm template gocacheport charts/gocacheport"
+
+[tasks.image]
+description = "Build the local validation image"
+run = "docker build --build-arg VERSION=dev --build-arg COMMIT=$(git rev-parse --short HEAD) -t gocacheport:dev ."
+
+[tasks.kubernetes]
+description = "Verify Helm, probes, metrics, and PVC restart on disposable kind"
+run = "bash scripts/check-kubernetes.sh"

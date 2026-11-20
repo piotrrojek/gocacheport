@@ -1,0 +1,7 @@
+[modules.go]
+source = "dagger.io/go"
+
+[modules.go.settings]
+base = "golang:1.27.3-bookworm"
+goflags = "-race -count=1 -buildvcs=false"
+mountPath = "/src/gocacheport"
