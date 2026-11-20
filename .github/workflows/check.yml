@@ -1,0 +1,26 @@
+name: Check
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://github.com/jdx/mise-action@v2
+        with:
+          cache: false
+      - run: mise run fmt && git diff --exit-code
+        env:
+          GOCACHEPROG: ""
+      - run: mise run check
+      - run: docker build --build-arg COMMIT="${GITHUB_SHA}" -t gocacheport:check .
+      - run: |
+          if [[ "${FORGEJO_ACTIONS:-}" == true ]]; then
+            export GOCACHEPORT_KIND_CONTAINER="$HOSTNAME"
+          fi
+          mise run kubernetes
+        env:
+          GOCACHEPORT_CHECK_IMAGE: gocacheport:check

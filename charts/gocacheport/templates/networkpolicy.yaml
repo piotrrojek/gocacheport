@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "gocacheport.fullname" . }}
+  labels:
+    {{- include "gocacheport.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "gocacheport.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+      from:
+        {{- toYaml .Values.networkPolicy.clientsFrom | nindent 8 }}
+    - ports:
+        - protocol: TCP
+          port: 9090
+      from:
+        {{- toYaml .Values.networkPolicy.monitoringFrom | nindent 8 }}
+{{- end }}
