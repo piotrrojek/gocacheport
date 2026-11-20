@@ -1,0 +1,188 @@
+{{- if lt (int64 .Values.cache.diskBytes) (add 56 (int64 .Values.cache.maxObjectBytes)) -}}
+{{- fail "cache.diskBytes must be at least cache.maxObjectBytes + 56" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gocacheport.fullname" . }}
+  labels:
+    {{- include "gocacheport.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "gocacheport.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "gocacheport.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gocacheport
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: admin
+              containerPort: 9090
+          env:
+            - name: GOCACHEPORT_DIR
+              value: /cache
+            - name: GOCACHEPORT_LISTEN
+              value: ":8080"
+            - name: GOCACHEPORT_ADMIN_LISTEN
+              value: ":9090"
+            - name: GOCACHEPORT_DISK_BYTES
+              value: {{ .Values.cache.diskBytes | int64 | quote }}
+            - name: GOCACHEPORT_MAX_ENTRIES
+              value: {{ .Values.cache.maxEntries | int64 | quote }}
+            - name: GOCACHEPORT_MAX_OBJECT_BYTES
+              value: {{ .Values.cache.maxObjectBytes | int64 | quote }}
+            - name: GOCACHEPORT_MEMORY_BYTES
+              value: {{ .Values.cache.memoryBytes | int64 | quote }}
+            - name: GOCACHEPORT_MEMORY_OBJECT_BYTES
+              value: {{ .Values.cache.memoryObjectBytes | int64 | quote }}
+            - name: GOCACHEPORT_TTL
+              value: {{ .Values.cache.ttl | quote }}
+            - name: GOCACHEPORT_MAX_CONCURRENT
+              value: {{ .Values.cache.maxConcurrent | quote }}
+            - name: GOCACHEPORT_REQUEST_TIMEOUT
+              value: {{ .Values.cache.requestTimeout | quote }}
+            - name: GOCACHEPORT_SHUTDOWN_TIMEOUT
+              value: {{ .Values.cache.shutdownTimeout | quote }}
+            - name: GOCACHEPORT_PPROF
+              value: {{ .Values.admin.pprof | quote }}
+            - name: GOCACHEPORT_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: GOMEMLIMIT
+              value: {{ .Values.goMemoryLimit | quote }}
+            {{- if .Values.auth.existingSecret }}
+            - name: GOCACHEPORT_TOKEN_FILE
+              value: /var/run/gocacheport/token
+            {{- end }}
+            - name: GOCACHEPORT_TRACING
+              value: {{ .Values.tracing.enabled | quote }}
+            {{- if .Values.tracing.enabled }}
+            - name: GOCACHEPORT_TRACE_SAMPLE_RATIO
+              value: {{ .Values.tracing.sampleRatio | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.tracing.endpoint | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.pod.uid=$(POD_UID),k8s.node.name=$(NODE_NAME)"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if and .Values.tracing.enabled .Values.tracing.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.tracing.existingSecret }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: admin
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+            - name: temporary
+              mountPath: /tmp
+            {{- if .Values.auth.existingSecret }}
+            - name: auth
+              mountPath: /var/run/gocacheport
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: cache
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "gocacheport.fullname" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir:
+            sizeLimit: {{ .Values.persistence.size }}
+          {{- end }}
+        - name: temporary
+          emptyDir:
+            sizeLimit: {{ .Values.temporaryStorageSize }}
+        {{- if .Values.auth.existingSecret }}
+        - name: auth
+          secret:
+            secretName: {{ .Values.auth.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.auth.tokenKey }}
+                path: token
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,19 @@
+name: Check
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: mise run fmt && git diff --exit-code
+      - run: mise run check
+      - run: docker build --build-arg COMMIT="${GITHUB_SHA}" -t gocacheport:check .
+      - run: mise run kubernetes
+        env:
+          GOCACHEPORT_CHECK_IMAGE: gocacheport:check

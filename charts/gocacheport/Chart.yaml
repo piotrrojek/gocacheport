@@ -1,0 +1,10 @@
+apiVersion: v2
+name: gocacheport
+description: Bounded filesystem-backed Go build cache with Prometheus and OTLP
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/piotrrojek/gocacheport
+sources:
+  - https://github.com/piotrrojek/gocacheport
+kubeVersion: ">=1.30.0-0"

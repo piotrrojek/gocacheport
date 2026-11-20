@@ -1,0 +1,36 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "gocacheport.fullname" . }}
+  labels:
+    {{- include "gocacheport.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: gocacheport
+      rules:
+        - alert: GocacheportUnavailable
+          expr: (up{namespace="{{ .Release.Namespace }}",service="{{ include "gocacheport.fullname" . }}-admin"} == 0) or absent(up{namespace="{{ .Release.Namespace }}",service="{{ include "gocacheport.fullname" . }}-admin"})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Go build cache is unavailable
+            description: Builds fall back to local compilation; inspect cache readiness and storage.
+        - alert: GocacheportRequestErrors
+          expr: sum(rate(gocacheport_http_requests_total{namespace="{{ .Release.Namespace }}",service="{{ include "gocacheport.fullname" . }}-admin",status_class="5xx"}[5m])) / clamp_min(sum(rate(gocacheport_http_requests_total{namespace="{{ .Release.Namespace }}",service="{{ include "gocacheport.fullname" . }}-admin"}[5m])), 0.01) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Go build cache request failures exceed five percent
+        - alert: GocacheportCorruptRecords
+          expr: increase(gocacheport_corruptions_total{namespace="{{ .Release.Namespace }}",service="{{ include "gocacheport.fullname" . }}-admin"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: Go build cache detected corrupt filesystem records
+{{- end }}

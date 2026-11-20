@@ -1,0 +1,6 @@
+/bin/
+/.cache/
+/.artifacts/
+/.env
+*.prof
+*.test

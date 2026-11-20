@@ -1,0 +1,8 @@
+Artifact service: {{ include "gocacheport.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+Prometheus endpoint: {{ include "gocacheport.fullname" . }}-admin.{{ .Release.Namespace }}.svc:{{ .Values.admin.port }}/metrics
+
+Run one replica per cache directory. Recreate updates preserve the PVC.
+Use a trusted build network and auth.existingSecret for bearer authentication.
+{{- if .Values.persistence.retain }}
+The chart-created PVC is retained when this release is uninstalled.
+{{- end }}
